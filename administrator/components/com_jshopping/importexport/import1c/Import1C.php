@@ -11,6 +11,17 @@ defined('_JEXEC') or die();
 
 jimport('joomla.filesystem.folder');
 
+
+function recursive_array_search($needle, $parametr, $haystack) {
+    foreach($haystack as $key=>$value) {
+        $current_key=$key;
+        if($needle==$value->{$parametr}) {
+            return $current_key;
+        }
+    }
+    return false;
+}
+
 class IeImport1C extends IeController
 {
 	function view()
@@ -48,10 +59,6 @@ class IeImport1C extends IeController
 		$_importexport->set('endstart', time());
 		$_importexport->store();
 
-		//get list category
-		//$query = "SELECT category_id as id, `".$lang->get("name")."` as name FROM `#__jshopping_categories`";
-
-
 		$_categories = JSFactory::getModel('categories', 'JshoppingModel');
 
 		$dir = $jshopConfig->importexport_path.$alias."/";
@@ -62,7 +69,6 @@ class IeImport1C extends IeController
 
 		if ($upload->upload())
 		{
-			$test_id = 1;
 
 			$filename = $dir . "/" . $upload->getName();
 			@chmod($filename, 0777);
@@ -73,6 +79,12 @@ class IeImport1C extends IeController
 				$db = JFactory::getDbo();
 				$query = $db->getQuery(true);
 
+				$query->select($db->quoteName(array('xml_id', 'category_id')))
+                    ->from($db->quoteName('#__jshopping_import1c_categories'));
+
+                $db->setQuery($query);
+                $existCats = $db->loadObjectList();
+
 				$columns = array(
 					$db->quoteName('category_id'),
 					$db->quoteName('xml_id'),
@@ -82,33 +94,32 @@ class IeImport1C extends IeController
 
 				foreach($categories as &$category)
 				{
-					$post = $this->getPrepareDataSave($category);
+					$post = $this->getPrepareDataSave($category, $existCats);
 					$cat = $_categories->save($post, null);
 
-					/*echo '<pre>';
-					var_dump($cat);
-					echo PHP_EOL;
-					echo '</pre>';*/
+					if($post['category_id'])
+					    continue;
 
-					$valuesArr = array($cat->category_id,
-						$db->quote($category->getId()),
-						$db->quote($category->getParent()),
-						);
+					$valuesArr = $db->quote(
+					    array(
+					        $cat->category_id,
+                            $category->getId(),
+                            $category->getParent()
+						)
+                    );
 					$values[] = implode (',', $valuesArr);
 				}
-
 				unset($category);
 
-				/*echo '<pre>';
-				var_dump($values);
-				echo '</pre>';*/
+				if(count($values)){
+                    $query->insert($db->quoteName('#__jshopping_import1c_categories'))
+                        ->columns($columns)
+                        ->values($values);
+                    $db->setQuery($query);
+                    $db->query();
+                }
 
-				$query->insert($db->quoteName('#__jshopping_import1c_categories'))
-					->columns($columns)
-					->values($values);
-				$db->setQuery($query);
-				//echo $query->dump();
-				$db->query();
+
 
 				$this->setParents();
 			}
@@ -142,14 +153,20 @@ class IeImport1C extends IeController
 		return $categories;
 	}
 
-	function getPrepareDataSave(&$input)
+	function getPrepareDataSave(&$input, &$catList)
 	{
 		$jshopConfig = JSFactory::getConfig();
 		$_lang = JSFactory::getModel("languages");
 		$languages = $_lang->getAllLanguages(1);
 		$_alias = JSFactory::getModel("alias");
 		$post = array();
-		foreach($languages as $lang)
+
+        $key=recursive_array_search($input->getId(),'xml_id', $catList);
+        if($key!==false)
+            $post['category_id'] = $catList[$key]->category_id;
+        unset($key);
+
+        foreach($languages as $lang)
 		{
 			$post['name_'.$lang->language] = trim($input->getName());
 
@@ -179,7 +196,6 @@ class IeImport1C extends IeController
 			->join('INNER' ,$db->quoteName('#__jshopping_import1c_categories', 's2') . ' ON (' . $db->quoteName('s2.xml_id') . ' = ' . $db->quoteName('s1.xml_parent_id') . ')')
 			->set($db->quoteName('jsh_cats.category_parent_id') . '=' . $db->quoteName('s2.category_id'));
 		$db->setQuery($query);
-		//echo $query->dump();
 		$db->query();
 	}
 }
