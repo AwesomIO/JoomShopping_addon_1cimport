@@ -166,6 +166,9 @@ class IeImport1C extends IeController
             $post['category_id'] = $catList[$key]->category_id;
         unset($key);
 
+        if($input->getOrder())
+            $post['ordering'] = $input->getOrder();
+
         foreach($languages as $lang)
 		{
 			$post['name_'.$lang->language] = trim($input->getName());
