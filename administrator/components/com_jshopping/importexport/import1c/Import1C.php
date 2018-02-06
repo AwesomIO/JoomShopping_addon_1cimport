@@ -36,22 +36,6 @@ class IeImport1C extends IeController
 		$jshopConfig = JSFactory::getConfig();
 		require_once(JPATH_COMPONENT_SITE . '/lib/uploadfile.class.php');
 
-
-		/*$db = JFactory::getDbo();
-		$query = $db->getQuery(true);
-
-		$columns = array('category_id','xml_id','xml_parent_id');
-		$values = array();
-
-		$values[] = '1, 23423, 234';
-		$values[] = '2, 23223, 23423';
-
-		$query->insert($db->quoteName('#__jshopping_import1c_categoriec'));
-		$query->columns($columns);
-		$query->values($values);
-		$db->setQuery($query);
-		$db->query();*/
-
 		$ie_id = $app->input->getInt("ie_id");
 		if (!$ie_id) $ie_id = $this->get('ie_id');
 
@@ -119,7 +103,7 @@ class IeImport1C extends IeController
 				var_dump($values);
 				echo '</pre>';*/
 
-				$query->insert($db->quoteName('#__jshopping_import1c_categoriec'))
+				$query->insert($db->quoteName('#__jshopping_import1c_categories'))
 					->columns($columns)
 					->values($values);
 				$db->setQuery($query);
@@ -191,8 +175,8 @@ class IeImport1C extends IeController
 		$query = $db->getQuery(true);
 
 		$query->update($db->quoteName('#__jshopping_categories', 'jsh_cats'))
-			->join('INNER', $db->quoteName('#__jshopping_import1c_categoriec', 's1') . ' ON (' . $db->quoteName('s1.category_id') . ' = ' . $db->quoteName('jsh_cats.category_id') . ')')
-			->join('INNER' ,$db->quoteName('#__jshopping_import1c_categoriec', 's2') . ' ON (' . $db->quoteName('s2.xml_id') . ' = ' . $db->quoteName('s1.xml_parent_id') . ')')
+			->join('INNER', $db->quoteName('#__jshopping_import1c_categories', 's1') . ' ON (' . $db->quoteName('s1.category_id') . ' = ' . $db->quoteName('jsh_cats.category_id') . ')')
+			->join('INNER' ,$db->quoteName('#__jshopping_import1c_categories', 's2') . ' ON (' . $db->quoteName('s2.xml_id') . ' = ' . $db->quoteName('s1.xml_parent_id') . ')')
 			->set($db->quoteName('jsh_cats.category_parent_id') . '=' . $db->quoteName('s2.category_id'));
 		$db->setQuery($query);
 		//echo $query->dump();
