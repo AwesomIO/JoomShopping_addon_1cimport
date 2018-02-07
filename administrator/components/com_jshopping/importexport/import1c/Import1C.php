@@ -73,9 +73,9 @@ class IeImport1C extends IeController
 			$filename = $dir . "/" . $upload->getName();
 			@chmod($filename, 0777);
 
-			$categories = $this->parse($filename);
+			$result = $this->parse($filename);
 
-			if(count($categories)){
+			if(count($result['categories'])){
 				$db = JFactory::getDbo();
 				$query = $db->getQuery(true);
 
@@ -92,7 +92,7 @@ class IeImport1C extends IeController
 				);
 				$values = array();
 
-				foreach($categories as &$category)
+				foreach($result['categories'] as &$category)
 				{
 					$post = $this->getPrepareDataSave($category, $existCats);
 					$cat = $_categories->save($post, null);
@@ -119,8 +119,6 @@ class IeImport1C extends IeController
                     $db->query();
                 }
 
-
-
 				$this->setParents();
 			}
 
@@ -139,18 +137,23 @@ class IeImport1C extends IeController
 	{
 		$categories = [];
 
+		$result = array(
+		    'categories' => '',
+            'products' => '',
+        );
+
 		require_once(JPATH_BASE.'/../cml/vendor/autoload.php');
 
 		$parser = new \CommerceMLParser\Parser;
 		$parser
 			->addListener("CategoryEvent",
-			function (\CommerceMLParser\Event\CategoryEvent $categoryEvent) use (&$categories)
+			function (\CommerceMLParser\Event\CategoryEvent $categoryEvent) use (&$result)
 			{
-				$categories = $categoryEvent->getCategory()->fetch();
+                $result['categories'] = $categoryEvent->getCategory()->fetch();
 			});
 		$parser->parse($filename);
 
-		return $categories;
+		return $result;
 	}
 
 	function getPrepareDataSave(&$input, &$catList)
