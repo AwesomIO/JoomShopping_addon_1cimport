@@ -181,7 +181,7 @@ class IeImport1C extends IeController
 				$post['alias_'.$lang->language] = $post['name_'.$lang->language];
 			}
 			$post['alias_'.$lang->language] = JApplication::stringURLSafe($post['alias_'.$lang->language]);
-			if ($post['alias_'.$lang->language]!="" && !$_alias->checkExistAlias1Group($post['alias_'.$lang->language], $lang->language, $input->getId(), 0))
+			if ($post['alias_'.$lang->language]!="" && !$_alias->checkExistAlias1Group($post['alias_'.$lang->language], $lang->language, $input->getId(), 0) && !$post['category_id'])
 			{
 				$post['alias_'.$lang->language] = "";
 				JError::raiseWarning("",_JSHOP_ERROR_ALIAS_ALREADY_EXIST);
