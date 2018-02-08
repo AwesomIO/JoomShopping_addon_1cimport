@@ -11,6 +11,7 @@ defined('_JEXEC') or die();
 
 jimport('joomla.filesystem.folder');
 
+require_once(JPATH_BASE.'/../cml/vendor/autoload.php');
 require_once __DIR__.'/helpers/CategoryHelper.php';
 require_once __DIR__.'/helpers/ProductHelper.php';
 
@@ -24,8 +25,17 @@ function recursive_array_search($needle, $parametr, $haystack) {
     return false;
 }
 
+function cmp(&$a, &$b)
+{
+    if ($a->getOrder() == $b->getOrder()) {
+        return 0;
+    }
+    return ($a->getOrder() < $b->getOrder()) ? -1 : 1;
+}
+
 class IeImport1C extends IeController
 {
+
 	function view()
 	{
 		$app = JFactory::getApplication();
@@ -45,21 +55,23 @@ class IeImport1C extends IeController
 
 	function save()
 	{
-		$app = JFactory::getApplication();
+	    $app = JFactory::getApplication();
 		$jshopConfig = JSFactory::getConfig();
 		require_once(JPATH_COMPONENT_SITE . '/lib/uploadfile.class.php');
+
+        $this->maxExecuteTime = 25;
+        $this->startTime = time();
+        $this->lastSaveId = $app->input->get('last-save-id');
 
 		$ie_id = $app->input->getInt("ie_id");
 		if (!$ie_id) $ie_id = $this->get('ie_id');
 
-		$lang = JSFactory::getLang();
-		$db = JFactory::getDBO();
+        $_importexport = JSFactory::getTable('ImportExport', 'jshop');
+        $_importexport->load($ie_id);
+        $alias = $_importexport->get('alias');
+        $_importexport->set('endstart', time());
+        $_importexport->store();
 
-		$_importexport = JSFactory::getTable('ImportExport', 'jshop');
-		$_importexport->load($ie_id);
-		$alias = $_importexport->get('alias');
-		$_importexport->set('endstart', time());
-		$_importexport->store();
 
 		$_categories = JSFactory::getModel('categories', 'JshoppingModel');
 
@@ -76,9 +88,12 @@ class IeImport1C extends IeController
 			@chmod($filename, 0777);
 
 			$result = $this->parse($filename);
+            $db = JFactory::getDbo();
 
 			if(count($result['categories'])){
-				$db = JFactory::getDbo();
+
+                usort($result['categories'], "cmp");
+
 				$query = $db->getQuery(true);
 
 				$query->select($db->quoteName(array('xml_id', 'category_id')))
@@ -130,9 +145,9 @@ class IeImport1C extends IeController
 			JError::raiseWarning("", _JSHOP_ERROR_UPLOADING);
 		}
 
-		if (!$app->input->getInt("noredirect")){
-			$app->redirect("index.php?option=com_jshopping&controller=importexport&task=view&ie_id=".$ie_id, _JSHOP_COMPLETED);
-		}
+//		if (!$app->input->getInt("noredirect")){
+//			$app->redirect("index.php?option=com_jshopping&controller=importexport&task=view&ie_id=".$ie_id, _JSHOP_COMPLETED);
+//		}
 	}
 
 	function parse($filename)
@@ -142,15 +157,24 @@ class IeImport1C extends IeController
             'products' => '',
         );
 
-		require_once(JPATH_BASE.'/../cml/vendor/autoload.php');
-
 		$parser = new \CommerceMLParser\Parser;
+
 		$parser
 			->addListener("CategoryEvent",
 			function (\CommerceMLParser\Event\CategoryEvent $categoryEvent) use (&$result)
 			{
                 $result['categories'] = $categoryEvent->getCategory()->fetch();
 			});
+
+        $db = JFactory::getDbo();
+        $query = $db->getQuery(true);
+
+        $parser->addListener("ProductEvent", function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$db, &$query) {
+            $product = $ProductEvent->getProduct();
+            $add = ProductHelper::add($product, $db, $query);
+
+        });
+
 		$parser->parse($filename);
 
 		return $result;
@@ -161,7 +185,8 @@ class IeImport1C extends IeController
 	function setParents()
 	{
 		$db = JFactory::getDbo();
-		$query = $db->getQuery(true);
+		$query = $db->getQuery(false);
+		$query->clear();
 
 		$query->update($db->quoteName('#__jshopping_categories', 'jsh_cats'))
 			->join('INNER', $db->quoteName('#__jshopping_import1c_categories', 's1') . ' ON (' . $db->quoteName('s1.category_id') . ' = ' . $db->quoteName('jsh_cats.category_id') . ')')
