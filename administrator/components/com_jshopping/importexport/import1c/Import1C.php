@@ -35,11 +35,14 @@ function cmp(&$a, &$b)
 
 class IeImport1C extends IeController
 {
+    public $_app;
+    public $jsConfig;
+    public $parameters;
+    public $_alias;
+    public $_categories;
 
 	function view()
 	{
-		$app = JFactory::getApplication();
-		$jshopConfig = JSFactory::getConfig();
 		$ie_id = $this->ie_id;
 		$_importexport = JSFactory::getTable('ImportExport', 'jshop');
 		$_importexport->load($ie_id);
@@ -53,96 +56,73 @@ class IeImport1C extends IeController
 		include(dirname(__FILE__)."/form.php");
 	}
 
+	private function init(){
+	    $this->_app = &JFactory::getApplication();
+	    $this->jsConfig = &JSFactory::getConfig();
+	    $this->parameters = new \Joomla\Registry\Registry;
+	    $this->_alias = &JSFactory::getModel("alias");
+        $this->_categories = &JSFactory::getModel('categories', 'JshoppingModel');
+
+	    // set parameters of import-export
+        $ie_id = $this->_app->input->getInt("ie_id");
+        if (!$ie_id) $ie_id = intval($this->get('ie_id'));
+        $ie = $this->getIE($ie_id);
+	    $this->parameters->set('ie', $ie);
+
+        // get languages of component
+        $lang = JSFactory::getModel("languages");
+        $this->parameters->set('languages', $lang->getAllLanguages(1));
+    }
+
+    static function getIE(int $ieId){
+        $db = JFactory::getDbo();
+        $query = $db->getQuery(true);
+        $query->update($db->quoteName('#__jshopping_import_export'))
+            ->set($db->quoteName('endstart') .'='. time())
+            ->where($db->quoteName('id') .' = '. $ieId);
+        $db->setQuery($query);
+        $db->execute();
+        $query->clear();
+        $query->select('*')
+            ->from($db->quoteName('#__jshopping_import_export'))
+            ->where($db->quoteName('id') .' = '. $ieId);
+        $db->setQuery($query);
+        $ie = $db->loadAssoc();
+        return $ie;
+    }
+
+    private function makeUpload($dir){
+        require_once(JPATH_COMPONENT_SITE . '/lib/uploadfile.class.php');
+
+        $upload = new UploadFile($_FILES['file']);
+        $upload->setAllowFile(array('xml'));
+        $upload->setDir($dir);
+        if ($upload->upload())
+        {
+            @chmod($dir . "/" . $upload->getName(), 0777);
+            return $upload->getName();
+        }
+        else
+        {
+            JError::raiseWarning("", _JSHOP_ERROR_UPLOADING);
+            $this->end();
+            return false;
+        }
+    }
+
 	function save()
 	{
-	    $app = JFactory::getApplication();
-		$jshopConfig = JSFactory::getConfig();
-		require_once(JPATH_COMPONENT_SITE . '/lib/uploadfile.class.php');
+	    $this->init();
 
-        $this->maxExecuteTime = 25;
-        $this->startTime = time();
-        $this->lastSaveId = $app->input->get('last-save-id');
-
-		$ie_id = $app->input->getInt("ie_id");
-		if (!$ie_id) $ie_id = $this->get('ie_id');
-
-        $_importexport = JSFactory::getTable('ImportExport', 'jshop');
-        $_importexport->load($ie_id);
-        $alias = $_importexport->get('alias');
-        $_importexport->set('endstart', time());
-        $_importexport->store();
-
-
-		$_categories = JSFactory::getModel('categories', 'JshoppingModel');
-
-		$dir = $jshopConfig->importexport_path.$alias."/";
-
-		$upload = new UploadFile($_FILES['file']);
-		$upload->setAllowFile(array('xml'));
-		$upload->setDir($dir);
-
-		if ($upload->upload())
-		{
-
-			$filename = $dir . "/" . $upload->getName();
-			@chmod($filename, 0777);
-
-			$result = $this->parse($filename);
-            $db = JFactory::getDbo();
-
-			if(count($result['categories'])){
-
-                usort($result['categories'], "cmp");
-
-				$query = $db->getQuery(true);
-
-				$query->select($db->quoteName(array('xml_id', 'category_id')))
-                    ->from($db->quoteName('#__jshopping_import1c_categories'));
-
-                $db->setQuery($query);
-                $existCats = $db->loadObjectList();
-
-				$columns = array(
-					$db->quoteName('category_id'),
-					$db->quoteName('xml_id'),
-					$db->quoteName('xml_parent_id')
-				);
-				$values = array();
-
-				foreach($result['categories'] as &$category)
-				{
-					$post = CategoryHelper::getPrepareDataSave($category, $existCats);
-					$cat = $_categories->save($post, null);
-
-					if($post['category_id'])
-					    continue;
-
-					$valuesArr = $db->quote(
-					    array(
-					        $cat->category_id,
-                            $category->getId(),
-                            $category->getParent()
-						)
-                    );
-					$values[] = implode (',', $valuesArr);
-				}
-				unset($category);
-
-				if(count($values)){
-                    $query->insert($db->quoteName('#__jshopping_import1c_categories'))
-                        ->columns($columns)
-                        ->values($values);
-                    $db->setQuery($query);
-                    $db->query();
-                }
-
-				$this->setParents();
-			}
-
-			@unlink($filename);
+		$dir = $this->jsConfig->importexport_path . $this->parameters->get('ie')['alias'] .'/';
+        if($file=$this->makeUpload($dir))
+        {
+            $filename = $dir . '/' . $file;
+			$this->parse($filename);
+			//@unlink($filename);
 		}
 		else {
-			JError::raiseWarning("", _JSHOP_ERROR_UPLOADING);
+            $this->end();
 		}
 
 //		if (!$app->input->getInt("noredirect")){
@@ -152,47 +132,30 @@ class IeImport1C extends IeController
 
 	function parse($filename)
 	{
-		$result = array(
-		    'categories' => '',
-            'products' => '',
-        );
-
 		$parser = new \CommerceMLParser\Parser;
+
+		$that = &$this;
 
 		$parser
 			->addListener("CategoryEvent",
-			function (\CommerceMLParser\Event\CategoryEvent $categoryEvent) use (&$result)
-			{
-                $result['categories'] = $categoryEvent->getCategory()->fetch();
-			});
+                function (\CommerceMLParser\Event\CategoryEvent $categoryEvent) use (&$that)
+                {
+                    CategoryHelper::helper($categoryEvent->getCategory()->fetch(), $that);
+                });
 
-        $db = JFactory::getDbo();
-        $query = $db->getQuery(true);
 
-        $parser->addListener("ProductEvent", function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$db, &$query) {
+        /*$parser->addListener("ProductEvent", function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$db, &$query) {
             $product = $ProductEvent->getProduct();
             $add = ProductHelper::add($product, $db, $query);
 
-        });
+        });*/
 
 		$parser->parse($filename);
-
-		return $result;
 	}
 
-
-
-	function setParents()
-	{
-		$db = JFactory::getDbo();
-		$query = $db->getQuery(false);
-		$query->clear();
-
-		$query->update($db->quoteName('#__jshopping_categories', 'jsh_cats'))
-			->join('INNER', $db->quoteName('#__jshopping_import1c_categories', 's1') . ' ON (' . $db->quoteName('s1.category_id') . ' = ' . $db->quoteName('jsh_cats.category_id') . ')')
-			->join('INNER' ,$db->quoteName('#__jshopping_import1c_categories', 's2') . ' ON (' . $db->quoteName('s2.xml_id') . ' = ' . $db->quoteName('s1.xml_parent_id') . ')')
-			->set($db->quoteName('jsh_cats.category_parent_id') . '=' . $db->quoteName('s2.category_id'));
-		$db->setQuery($query);
-		$db->query();
-	}
+	private function end(){
+        if (!$this->_app->input->getInt("noredirect")){
+		    $this->_app->redirect("index.php?option=com_jshopping&controller=importexport&task=view&ie_id=".$ie_id, _JSHOP_COMPLETED);
+		}
+    }
 }
