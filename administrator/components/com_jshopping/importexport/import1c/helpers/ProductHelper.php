@@ -9,60 +9,104 @@
 
 defined('_JEXEC') or die();
 
+
 class ProductHelper
 {
-    static function getPrepareDataSave(&$input, &$db, &$query){
+    public static function helper(&$product, &$instIE)
+    {
+        $post = self::getPrepareDataSave($product, $instIE);
+        self::save($post, $instIE);
+        unset($post);
+        return true;
+    }
+
+    static function getPrepareDataSave(&$input, &$instIE){
         $post = array();
-        $jshConfig = JSFactory::getConfig();
-        $_alias = JSFactory::getModel("alias");
-        $_lang = JSFactory::getModel("languages");
-        $languages = $_lang->getAllLanguages(1);
 
-
-
-        foreach($languages as $lang){
+        foreach($instIE->parameters->get('languages') as $lang)
+        {
             $post['name_'.$lang->language] = trim($input->getName());
-            if ($jshConfig->create_alias_product_category_auto){
+
+            if ($instIE->jsConfig->create_alias_product_category_auto)
+            {
                 $post['alias_'.$lang->language] = $post['name_'.$lang->language];
             }
-            $post['alias_'.$lang->language] = JApplication::stringURLSafe($post['alias_'.$lang->language]);
-            if ($post['alias_'.$lang->language]!="" && !$_alias->checkExistAlias2Group($post['alias_'.$lang->language], $lang->language, $post['product_id'])){
-                $post['alias_'.$lang->language] = "";
-                JError::raiseWarning("", _JSHOP_ERROR_ALIAS_ALREADY_EXIST);
-            }
-            $post['description_'.$lang->language] = $input->getDescription();
+            $post['alias_'.$lang->language] = JApplicationHelper::stringURLSafe($post['alias_'.$lang->language]);
+            $post['description_'.$lang->language] = "";
+            $post['short_description_'.$lang->language] = "";
         }
 
+        unset($lang);
 
-        $query->clear();
+        $post['product_ean'] = $input->getCode(); //код товара
 
-        /*echo '<pre>';
-        var_dump($query);
-        die();*/
-        //$query->clear();
+        $post['product_date_added'] = getCurDate();
+        $post['date_modify'] = getCurDate();
 
-        $query->select($db->quoteName('category_id'))
-            ->from($db->quoteName('#__jshopping_import1c_categories'))
-            ->where($db->quoteName('xml_id') . ' IN (' . $db->quote(implode(',', $input->getCategories()->fetch())) . ')');
-        $db->setQuery($query);
-        //echo $query->dump();
-        $categoryId = $db->loadColumn();
+        $post['product_tax_id'] = 1;
+        $post['currency_id'] = 1;
 
-        if(count($categoryId)){
-            $post['category_id'] = $categoryId;
-        }
-        $post['product_ean'] = $input->getCode();
+        $post['product_template'] = 'default';
+        $post['product_url'] = '';
+
+        $post['product_old_price'] = 0;
+        $post['product_buy_price'] = 0;
+        $post['product_price'] = 0; //базовая цена
+        $post['min_price'] = 0; //минимальная цена
+        $post['different_prices'] = 0; //дополнительные цены
+
+        $post['product_weight'] = 0;
+        $post['image'] = '';
+        $post['product_manufacturer_id'] = 0;
+        $post['product_is_add_price'] = 1;
+        $post['add_price_unit_id'] = 3;
+        $post['average_rating'] = 0;
+        $post['reviews_count'] = 0;
+        $post['delivery_times_id'] = 0;
+        $post['hits'] = 0;
+        $post['weight_volume_units'] = 0;
+        $post['basic_price_unit_id'] = 3;
+        $post['label_id'] = 0;
+        $post['vendor_id'] = 0;
+        $post['access'] = 1;
+
+        $post['product_publish'] = 1;
+
+        $post['xml_id'] = $input->getId();
+        $post['xml_parent_id'] = $input->getCategories()->fetch();
 
         return $post;
     }
 
-    static function add(&$input, &$db, &$query){
-        $post = self::getPrepareDataSave($input, $db, $query);
-        $_products = JSFactory::getModel('products', 'JshoppingModel');
-        $_products->save($post);
+    static function save($post, &$instIE){
+        $columns =array();
+        $values =array();
+        $db = JFactory::getDbo();
 
-        //print_r($post);
+        foreach ($post as $key=>&$val){
+            $columns [] = $key;
+            if($key == 'xml_parent_id'){
+                $values [] = $db->quote($val[0]);
+            }
+            else{
+                $values [] = $db->quote($val);
+            }
+        }
 
-        return true;
+        $query = $db->getQuery(true);
+        $query->insert($db->quoteName('#__jshopping_products'))
+            ->columns($db->quoteName($columns))
+            ->values(implode(',', $values));
+
+        $db->setQuery($query);
+        if($db->execute())
+            $id = $db->insertid();
+        $query->clear();
+
+        if(isset($id)){
+
+        }
+        unset($db, $query, $key, $val);
     }
+
 }

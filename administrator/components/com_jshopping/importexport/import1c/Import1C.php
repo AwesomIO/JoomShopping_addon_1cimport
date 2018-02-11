@@ -15,22 +15,8 @@ require_once(JPATH_BASE.'/../cml/vendor/autoload.php');
 require_once __DIR__.'/helpers/CategoryHelper.php';
 require_once __DIR__.'/helpers/ProductHelper.php';
 
-function recursive_array_search($needle, $parametr, $haystack) {
-    foreach($haystack as $key=>$value) {
-        $current_key=$key;
-        if($needle==$value->{$parametr}) {
-            return $current_key;
-        }
-    }
-    return false;
-}
-
-function cmp(&$a, &$b)
-{
-    if ($a->getOrder() == $b->getOrder()) {
-        return 0;
-    }
-    return ($a->getOrder() < $b->getOrder()) ? -1 : 1;
+function getCurDate(){
+    return date("Y-m-d H:i:s", time());
 }
 
 class IeImport1C extends IeController
@@ -88,6 +74,7 @@ class IeImport1C extends IeController
             ->where($db->quoteName('id') .' = '. $ieId);
         $db->setQuery($query);
         $ie = $db->loadAssoc();
+        unset($db, $query);
         return $ie;
     }
 
@@ -144,18 +131,16 @@ class IeImport1C extends IeController
                 });
 
 
-        /*$parser->addListener("ProductEvent", function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$db, &$query) {
-            $product = $ProductEvent->getProduct();
-            $add = ProductHelper::add($product, $db, $query);
-
-        });*/
+        $parser->addListener("ProductEvent", function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$that) {
+            ProductHelper::helper($ProductEvent->getProduct(), $that);
+        });
 
 		$parser->parse($filename);
 	}
 
 	private function end(){
         if (!$this->_app->input->getInt("noredirect")){
-		    $this->_app->redirect("index.php?option=com_jshopping&controller=importexport&task=view&ie_id=".$ie_id, _JSHOP_COMPLETED);
+		    $this->_app->redirect("index.php?option=com_jshopping&controller=importexport&task=view&ie_id=".$this->parameters->get('ie')['id'], _JSHOP_COMPLETED);
 		}
     }
 }
