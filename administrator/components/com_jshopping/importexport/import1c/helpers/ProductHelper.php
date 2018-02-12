@@ -15,7 +15,8 @@ class ProductHelper
     public static function helper(&$product, &$instIE)
     {
         $post = self::getPrepareDataSave($product, $instIE);
-        self::save($post, $instIE);
+        $categories = $product->getCategories()->fetch();
+        self::save($post, $categories, $instIE);
         unset($post);
         return true;
     }
@@ -73,24 +74,19 @@ class ProductHelper
         $post['product_publish'] = 1;
 
         $post['xml_id'] = $input->getId();
-        $post['xml_parent_id'] = $input->getCategories()->fetch();
+        //$post['xml_parent_id'] = $input->getCategories()->fetch();
 
         return $post;
     }
 
-    static function save($post, &$instIE){
+    static function save($post, &$categories, &$instIE){
         $columns =array();
         $values =array();
         $db = JFactory::getDbo();
 
         foreach ($post as $key=>&$val){
             $columns [] = $key;
-            if($key == 'xml_parent_id'){
-                $values [] = $db->quote($val[0]);
-            }
-            else{
-                $values [] = $db->quote($val);
-            }
+            $values [] = $db->quote($val);
         }
 
         $query = $db->getQuery(true);
@@ -101,10 +97,23 @@ class ProductHelper
         $db->setQuery($query);
         if($db->execute())
             $id = $db->insertid();
+
         $query->clear();
+        unset($columns, $values);
 
         if(isset($id)){
+            $values = array();
+            foreach($categories as $category){
+                $values[] = $id .', '. $db->quote($category);
+            }
+            $query->insert($db->quoteName('#__jshopping_products_to_categories'))
+                ->columns($db->quoteName(array('product_id', 'xml_id')))
+                ->values($values);
+            $db->setQuery($query);
 
+            $db->execute();
+            unset($values);
+            $query->clear();
         }
         unset($db, $query, $key, $val);
     }

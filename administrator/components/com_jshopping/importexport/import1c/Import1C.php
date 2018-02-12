@@ -14,6 +14,7 @@ jimport('joomla.filesystem.folder');
 require_once(JPATH_BASE.'/../cml/vendor/autoload.php');
 require_once __DIR__.'/helpers/CategoryHelper.php';
 require_once __DIR__.'/helpers/ProductHelper.php';
+require_once __DIR__.'/helpers/OfferHelper.php';
 
 function getCurDate(){
     return date("Y-m-d H:i:s", time());
@@ -122,7 +123,6 @@ class IeImport1C extends IeController
 		$parser = new \CommerceMLParser\Parser;
 
 		$that = &$this;
-
 		$parser
 			->addListener("CategoryEvent",
                 function (\CommerceMLParser\Event\CategoryEvent $categoryEvent) use (&$that)
@@ -131,11 +131,36 @@ class IeImport1C extends IeController
                 });
 
 
-        $parser->addListener("ProductEvent", function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$that) {
-            ProductHelper::helper($ProductEvent->getProduct(), $that);
-        });
+        $parser
+            ->addListener("ProductEvent",
+                function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$that)
+                {
+                    ProductHelper::helper($ProductEvent->getProduct(), $that);
+                });
+        $parser
+            ->addListener("OfferEvent",
+                function (\CommerceMLParser\Event\OfferEvent $offerEvent) use (&$that)
+                {
+                    OfferHelper::helper($offerEvent->getOffer(), $that);
+                });
 
 		$parser->parse($filename);
+
+        $db = JFactory::getDbo();
+        $query = $db->getQuery(true);
+        $query->update($db->quoteName('#__jshopping_products_to_categories', 'jsh_prodcat'))
+            ->join('INNER', $db->quoteName('#__jshopping_categories', 'jsh_cat') . ' ON (' . $db->quoteName('jsh_prodcat.xml_id') . ' = ' . $db->quoteName('jsh_cat.xml_id') . ')')
+            ->set($db->quoteName('jsh_prodcat.category_id') . '=' . $db->quoteName('jsh_cat.category_id'));
+        $db->setQuery($query);
+        $db->execute();
+        $query->clear();
+        $query->update($db->quoteName('#__jshopping_products_prices', 'jsh_prices'))
+            ->join('INNER', $db->quoteName('#__jshopping_products', 'jsh_prod') . ' ON (' . $db->quoteName('jsh_prices.xml_id') . ' = ' . $db->quoteName('jsh_prod.xml_id') . ')')
+            ->set($db->quoteName('jsh_prices.product_id') . '=' . $db->quoteName('jsh_prod.product_id'));
+        $db->setQuery($query);
+        $db->execute();
+
+        $this->end();
 	}
 
 	private function end(){
