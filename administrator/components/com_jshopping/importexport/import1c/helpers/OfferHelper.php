@@ -29,17 +29,17 @@ class OfferHelper
         if(isset($price) && count($price)){
 
             //для таблицы доп. цен
-            $post['discount'] = -20;
-            $post['product_quantity_start'] = 1;
-            $post['product_quantity_finish'] = 0;
-            $post['xml_price_id'] = $price->getTypeId();
+            //$post['discount'] = -20;
+            //$post['product_quantity_start'] = 1;
+            //$post['product_quantity_finish'] = 0;
+            //$post['xml_price_id'] = $price->getTypeId();
 
             $post['currency_id'] = 1;
 
-            $post['min_price'] = floatval($price->getUnit());
-            $post['weight_volume_units'] = 1;
-            $post['product_buy_price'] = $post['product_price'] = (float) $post['min_price'] * 0.8;
-            $post['different_prices'] = 1; //дополнительные цены
+            $post['min_price'] = $post['product_buy_price'] = $post['product_price'] = floatval($price->getUnit());
+            //$post['weight_volume_units'] = 1;
+
+            $post['different_prices'] = 0; //дополнительные цены
 
             $post['product_is_add_price'] = 1;
             $post['add_price_unit_id'] = 3;
@@ -97,7 +97,7 @@ class OfferHelper
         $query->clear();
         unset($columns, $fields, $condition);
 
-        if($post['min_price']){
+        /*if($post['min_price']){
             $columns = array(
                 'discount',
                 'product_quantity_start',
@@ -117,7 +117,7 @@ class OfferHelper
             $db->setQuery($query);
             $db->execute();
             $query->clear();
-        }
+        }*/
 
         unset($db, $query, $key, $val);
     }
