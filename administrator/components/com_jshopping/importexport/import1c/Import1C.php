@@ -106,16 +106,13 @@ class IeImport1C extends IeController
         if($file=$this->makeUpload($dir))
         {
             $filename = $dir . '/' . $file;
+            $this->parameters->set('filename', $file);
 			$this->parse($filename);
 			//@unlink($filename);
 		}
 		else {
             $this->end();
 		}
-
-//		if (!$app->input->getInt("noredirect")){
-//			$app->redirect("index.php?option=com_jshopping&controller=importexport&task=view&ie_id=".$ie_id, _JSHOP_COMPLETED);
-//		}
 	}
 
 	function parse($filename)
@@ -150,20 +147,22 @@ class IeImport1C extends IeController
         $query = $db->getQuery(true);
         $query->update($db->quoteName('#__jshopping_products_to_categories', 'jsh_prodcat'))
             ->join('INNER', $db->quoteName('#__jshopping_categories', 'jsh_cat') . ' ON (' . $db->quoteName('jsh_prodcat.xml_id') . ' = ' . $db->quoteName('jsh_cat.xml_id') . ')')
-            ->set($db->quoteName('jsh_prodcat.category_id') . '=' . $db->quoteName('jsh_cat.category_id'));
+            ->set($db->quoteName('jsh_prodcat.category_id') . '=' . $db->quoteName('jsh_cat.category_id'))
+            ->where($db->quoteName('jsh_prodcat.xml_id') .' <> \'\'');
         $db->setQuery($query);
         $db->execute();
         $query->clear();
-        $query->update($db->quoteName('#__jshopping_products_prices', 'jsh_prices'))
+        /*$query->update($db->quoteName('#__jshopping_products_prices', 'jsh_prices'))
             ->join('INNER', $db->quoteName('#__jshopping_products', 'jsh_prod') . ' ON (' . $db->quoteName('jsh_prices.xml_id') . ' = ' . $db->quoteName('jsh_prod.xml_id') . ')')
             ->set($db->quoteName('jsh_prices.product_id') . '=' . $db->quoteName('jsh_prod.product_id'));
         $db->setQuery($query);
-        $db->execute();
+        $db->execute();*/
 
         $this->end();
 	}
 
 	private function end(){
+        @unlink($this->jsConfig->importexport_path . $this->parameters->get('ie')['alias'] .'/'. $this->parameters->get('filename'));
         if (!$this->_app->input->getInt("noredirect")){
 		    $this->_app->redirect("index.php?option=com_jshopping&controller=importexport&task=view&ie_id=".$this->parameters->get('ie')['id'], _JSHOP_COMPLETED);
 		}
