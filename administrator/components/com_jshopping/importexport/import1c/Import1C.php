@@ -117,14 +117,55 @@ class IeImport1C extends IeController
 
 	function parse($filename)
 	{
+	    //$this->prepareDb();
+
 		$parser = new \CommerceMLParser\Parser;
 
 		$that = &$this;
+
+        $db = JFactory::getDbo();
+
+        $db->setQuery('SET FOREIGN_KEY_CHECKS = 0')->execute();
+        $db->setQuery('TRUNCATE `#__tmp_ie_categories`')->execute();
+        $db->setQuery('TRUNCATE `#__tmp_ie_products`')->execute();
+        $db->setQuery('TRUNCATE `#__tmp_ie_product_categories`')->execute();
+        $db->setQuery('TRUNCATE `#__tmp_ie_product_units`')->execute();
+        $db->setQuery('TRUNCATE `#__tmp_ie_PriceType`')->execute();
+        $db->setQuery('TRUNCATE `#__tmp_ie_prices`')->execute();
+        $db->setQuery('TRUNCATE `#__tmp_ie_rests`')->execute();
+        $db->setQuery('SET FOREIGN_KEY_CHECKS = 1')->execute();
+
+        $db->setQuery('INSERT INTO `#__tmp_ie_categories` (`id`) VALUES (\'\')')->execute();
+
 		$parser
 			->addListener("CategoryEvent",
                 function (\CommerceMLParser\Event\CategoryEvent $categoryEvent) use (&$that)
                 {
-                    CategoryHelper::helper($categoryEvent->getCategory()->fetch(), $that);
+                    //CategoryHelper::helper($categoryEvent->getCategory()->fetch(), $that);
+
+                    $db = JFactory::getDbo();
+
+                    $sql='INSERT  INTO '. $db->quoteName('#__tmp_ie_categories') .' (`id`, `name`, `parent`, `order`) VALUES ';
+
+                    $vals = array();
+
+                    foreach ($categoryEvent->getCategory()->fetch() as $category){
+                        $values = array(
+                            $db->quote($category->getId()),
+                            $db->quote($category->getName()),
+                            $db->quote($category->getParent()),
+                            $category->getOrder()
+                        );
+                        $vals[] = '('.implode(',', $values).')';
+                    }
+
+                    $sql .= implode(',', $vals);
+
+                    $db->setQuery($sql);
+
+                    $db->execute();
+
+
                 });
 
 
@@ -132,37 +173,152 @@ class IeImport1C extends IeController
             ->addListener("ProductEvent",
                 function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$that)
                 {
-                    ProductHelper::helper($ProductEvent->getProduct(), $that);
+                    //ProductHelper::helper($ProductEvent->getProduct(), $that);
+                    $product = $ProductEvent->getProduct();
+
+                    $db = JFactory::getDbo();
+                    $query = $db->getQuery(true);
+
+                    $query
+                        ->insert('#__tmp_ie_products')
+                        ->columns($db->qn(array('id', 'name', 'description', 'code', 'barcode', 'manufacturer')))
+                        ->values( implode(',', array(
+                            $db->q($product->getId()),
+                            $db->q($product->getName()),
+                            $db->q($product->getDescription()),
+                            $db->q($product->getCode()),
+                            $db->q($product->getBarcode()),
+                            $db->q($product->getManufacturer())
+                        )));
+                    $db->setQuery($query)->execute();
+
+                    $categories = array();
+
+                    foreach($product->getCategories()->fetch() as $category){
+                        $categories[] = implode(',', array(
+                            $db->q($product->getId()),
+                            $db->q($category)
+                        ));
+                    }
+
+                    $query
+                        ->clear()
+                        ->insert('#__tmp_ie_product_categories')
+                        ->columns($db->qn(array('product', 'category')))
+                        ->values($categories);
+                    $db->setQuery($query)->execute();
+
+                    unset($categories);
+
+                    $query
+                        ->clear()
+                        ->insert('#__tmp_ie_product_units')
+                        ->columns($db->qn(array('product', 'value', 'code', 'nameFull', 'nameShort', 'nameInterShort')))
+                        ->values(implode(',', array(
+                            $db->q($product->getId()),
+                            $db->q($product->getbaseUnit()->__toString()),
+                            $db->q($product->getbaseUnit()->getCode()),
+                            $db->q($product->getbaseUnit()->getNameFull()),
+                            $db->q($product->getbaseUnit()->getNameShort()),
+                            $db->q($product->getbaseUnit()->getNameInterShort()),
+                        )));
+                    $db->setQuery($query)->execute();
+
+                    $query->clear();
+
                 });
+
+        $parser
+            ->addListener("PriceTypeEvent",
+                function (\CommerceMLParser\Event\PriceTypeEvent $PriceTypeEvent) use (&$that)
+                {
+                    $pricesType = $PriceTypeEvent->getPriceType();
+
+                    $db = JFactory::getDbo();
+                    $query = $db->getQuery(true);
+
+                    $query->insert('#__tmp_ie_PriceType')
+                        ->columns($db->qn(array('id', 'type', 'currency')))
+                        ->values(implode(',', array(
+                            $db->q($pricesType->getId()),
+                            $db->q($pricesType->getType()),
+                            $db->q($pricesType->getCurrency()),
+                        )));
+                    $db->setQuery($query)->execute();
+                });
+
         $parser
             ->addListener("OfferEvent",
                 function (\CommerceMLParser\Event\OfferEvent $offerEvent) use (&$that)
                 {
-                    OfferHelper::helper($offerEvent->getOffer(), $that);
+                    $offer = $offerEvent->getOffer();
+                    $prices = $offer->getPrices()->fetch();
+                    $rests = $offer->getRests()->fetch();
+
+                    $db = JFactory::getDbo();
+                    $query = $db->getQuery(true);
+
+                    if(count($prices)){
+
+                        $values = array();
+
+                        foreach ($prices as $price){
+                            $values[] = implode(',', array(
+                                $db->q($offer->getId()),
+                                $db->q($price->getTypeId()),
+                                $db->q($price->getUnit()),
+                                $db->q($price->getCurrency()),
+                                $db->q($price->getBaseUnit()),
+                                $db->q($price->getKoeff()),
+                            ));
+                        }
+
+                        $query->clear()
+                            ->insert('#__tmp_ie_prices')
+                            ->columns($db->qn(array('product', 'type', 'unit', 'currency', 'baseUnit', 'koeff')))
+                            ->values($values);
+                        $db->setQuery($query)->execute();
+
+                        unset($values);
+                    }
+
+                    if(count($rests)){
+
+                        $values = array();
+
+                        foreach ($rests as $rest){
+                            $values[] = implode(',', array(
+                                $db->q($offer->getId()),
+                                $db->q($rest->getId()),
+                                $db->q($rest->getRest())
+                            ));
+                        }
+
+                        $query->clear()
+                            ->insert('#__tmp_ie_rests')
+                            ->columns($db->qn(array('product', 'rest_id', 'rest')))
+                            ->values($values);
+                        $db->setQuery($query)->execute();
+
+                        unset($values);
+                    }
+
                 });
 
-		$parser->parse($filename);
+        $files = array(
+            $this->jsConfig->importexport_path . $this->parameters->get('ie')['alias'] .'/import.xml',
+            $this->jsConfig->importexport_path . $this->parameters->get('ie')['alias'] .'/offers.xml',
+            $this->jsConfig->importexport_path . $this->parameters->get('ie')['alias'] .'/rests.xml',
+        );
+        foreach ($files as $filename){
+            $parser->parse($filename);
+        }
 
-        $db = JFactory::getDbo();
-        $query = $db->getQuery(true);
-        $query->update($db->quoteName('#__jshopping_products_to_categories', 'jsh_prodcat'))
-            ->join('INNER', $db->quoteName('#__jshopping_categories', 'jsh_cat') . ' ON (' . $db->quoteName('jsh_prodcat.xml_id') . ' = ' . $db->quoteName('jsh_cat.xml_id') . ')')
-            ->set($db->quoteName('jsh_prodcat.category_id') . '=' . $db->quoteName('jsh_cat.category_id'))
-            ->where($db->quoteName('jsh_prodcat.xml_id') .' <> \'\'');
-        $db->setQuery($query);
-        $db->execute();
-        $query->clear();
-        /*$query->update($db->quoteName('#__jshopping_products_prices', 'jsh_prices'))
-            ->join('INNER', $db->quoteName('#__jshopping_products', 'jsh_prod') . ' ON (' . $db->quoteName('jsh_prices.xml_id') . ' = ' . $db->quoteName('jsh_prod.xml_id') . ')')
-            ->set($db->quoteName('jsh_prices.product_id') . '=' . $db->quoteName('jsh_prod.product_id'));
-        $db->setQuery($query);
-        $db->execute();*/
-
-        $this->end();
+        //$this->end();
 	}
 
 	private function end(){
-        @unlink($this->jsConfig->importexport_path . $this->parameters->get('ie')['alias'] .'/'. $this->parameters->get('filename'));
+        //@unlink($this->jsConfig->importexport_path . $this->parameters->get('ie')['alias'] .'/'. $this->parameters->get('filename'));
         if (!$this->_app->input->getInt("noredirect")){
 		    $this->_app->redirect("index.php?option=com_jshopping&controller=importexport&task=view&ie_id=".$this->parameters->get('ie')['id'], _JSHOP_COMPLETED);
 		}
