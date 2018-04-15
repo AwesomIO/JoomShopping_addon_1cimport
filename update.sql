@@ -133,8 +133,8 @@ CREATE TABLE IF NOT EXISTS #__jshopping_import_export_categories
   category_id int NOT NULL,
   xml_id nvarchar(128) NOT NULL,
   last_import datetime DEFAULT NOW() NOT NULL,
-  CONSTRAINT #__jshopping_import_export_categories___category_id FOREIGN KEY (category_id) REFERENCES #__jshopping_categories (category_id),
-  CONSTRAINT #__jshopping_import_export_categories___id FOREIGN KEY (xml_id) REFERENCES #__tmp_ie_categories (id)
+  CONSTRAINT `#__jshopping_import_export_categories___category_id` FOREIGN KEY (category_id) REFERENCES `#__jshopping_categories (category_id)`,
+  CONSTRAINT `#__jshopping_import_export_categories___id` FOREIGN KEY (xml_id) REFERENCES `#__tmp_ie_categories (id)`
 );
 
 call createindex('#__jshopping_import_export_categories','#__jshopping_import_export_categories___category_id','category_id');
