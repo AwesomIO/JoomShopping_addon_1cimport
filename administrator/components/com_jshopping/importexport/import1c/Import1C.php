@@ -117,11 +117,9 @@ class IeImport1C extends IeController
 
 	function parse($filename)
 	{
-	    //$this->prepareDb();
+        $mem_start = memory_get_usage();
 
 		$parser = new \CommerceMLParser\Parser;
-
-		$that = &$this;
 
         $db = JFactory::getDbo();
 
@@ -139,12 +137,8 @@ class IeImport1C extends IeController
 
 		$parser
 			->addListener("CategoryEvent",
-                function (\CommerceMLParser\Event\CategoryEvent $categoryEvent) use (&$that)
+                function (\CommerceMLParser\Event\CategoryEvent $categoryEvent) use (&$db)
                 {
-                    //CategoryHelper::helper($categoryEvent->getCategory()->fetch(), $that);
-
-                    $db = JFactory::getDbo();
-
                     $sql='INSERT  INTO '. $db->quoteName('#__tmp_ie_categories') .' (`id`, `name`, `parent`, `order`) VALUES ';
 
                     $vals = array();
@@ -171,12 +165,10 @@ class IeImport1C extends IeController
 
         $parser
             ->addListener("ProductEvent",
-                function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$that)
+                function (\CommerceMLParser\Event\ProductEvent $ProductEvent) use (&$db)
                 {
-                    //ProductHelper::helper($ProductEvent->getProduct(), $that);
                     $product = $ProductEvent->getProduct();
 
-                    $db = JFactory::getDbo();
                     $query = $db->getQuery(true);
 
                     $query
@@ -230,11 +222,10 @@ class IeImport1C extends IeController
 
         $parser
             ->addListener("PriceTypeEvent",
-                function (\CommerceMLParser\Event\PriceTypeEvent $PriceTypeEvent) use (&$that)
+                function (\CommerceMLParser\Event\PriceTypeEvent $PriceTypeEvent) use (&$db)
                 {
                     $pricesType = $PriceTypeEvent->getPriceType();
 
-                    $db = JFactory::getDbo();
                     $query = $db->getQuery(true);
 
                     $query->insert('#__tmp_ie_PriceType')
@@ -249,13 +240,12 @@ class IeImport1C extends IeController
 
         $parser
             ->addListener("OfferEvent",
-                function (\CommerceMLParser\Event\OfferEvent $offerEvent) use (&$that)
+                function (\CommerceMLParser\Event\OfferEvent $offerEvent) use (&$db)
                 {
                     $offer = $offerEvent->getOffer();
                     $prices = $offer->getPrices()->fetch();
                     $rests = $offer->getRests()->fetch();
 
-                    $db = JFactory::getDbo();
                     $query = $db->getQuery(true);
 
                     if(count($prices)){
@@ -313,6 +303,50 @@ class IeImport1C extends IeController
         foreach ($files as $filename){
             $parser->parse($filename);
         }
+
+        $query=$db->getQuery(true);
+
+        $query->select($db->qn(
+            array('iec.id', 'iec.name', 'iec.order'),
+            array('id', 'name', 'ordering')
+        ))
+            ->from($db->qn('#__tmp_ie_categories', 'iec'))
+            ->join('LEFT',
+                $db->qn('#__jshopping_import_export_categories', 'jiec') . ' ON (' . $db->qn('jiec.xml_id') . ' = ' . $db->qn('iec.id') . ')')
+           ->where($db->qn('jiec.xml_id') . 'IS NULL')
+           ->where($db->qn('iec.id') . '<> \'\'');
+        $db->setQuery($query);
+        $newCategories = $db->loadObjectList();
+        $query->clear();
+
+        foreach ($newCategories as $newCategory){
+            CategoryHelper::helper($newCategory, $this);
+        }
+
+        /*$query->update($db->qn('#__jshopping_categories', 'c'))
+            ->set($db->qn('c.category_parent_id') .'='. $db->qn('parent.category_id'))
+            ->join('LEFT',
+                $db->qn('#__jshopping_import_export_categories', 'category') .' ON '. $db->qn('c.category_id') .'='. $db->qn('category.category_id'))
+            ->join('LEFT',
+                $db->qn('#__tmp_ie_categories', 'category2') .' ON '. $db->qn('category.xml_id') .'='. $db->qn('category2.id'))
+            ->join('LEFT',
+                $db->qn('#__jshopping_import_export_categories', 'parent') .' ON '. $db->qn('category2.parent') .'='. $db->qn('parent.xml_id'))
+            ->where($db->qn('c.category_parent_id') .'='. 0)
+            ->where($db->qn('category2.parent') .'<> \'\'');
+
+        $db->setQuery($query);
+        $db->execute();*/
+
+
+
+        echo '<pre>';
+        echo $query->__toString();
+        echo (memory_get_usage() - $mem_start) / (1024*1024) . ' Mb';
+        echo PHP_EOL;
+        echo  memory_get_peak_usage(true) /(1024*1024) . ' Mb';
+        echo '</pre>';
+
+
 
         //$this->end();
 	}
