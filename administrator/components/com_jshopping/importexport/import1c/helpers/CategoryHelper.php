@@ -50,12 +50,14 @@ class CategoryHelper
     static function save(array $post){
         $db = JFactory::getDbo();
         $query = $db->getQuery(true);
+
         $col=array();
         $val=array();
         foreach ($post as $k=>$v){
             $col[]=$k;
             $val[]=$db->q($v);
         }
+        unset($k, $v);
 
         $query->insert($db->qn('#__jshopping_categories'))
             ->columns($db->qn($col))
