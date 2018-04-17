@@ -15,9 +15,17 @@ class ProductHelper
     public static function helper(&$product, &$instIE)
     {
         $post = self::getPrepareDataSave($product, $instIE);
-        $categories = $product->getCategories()->fetch();
-        self::save($post, $categories, $instIE);
-        unset($post);
+        $prodId = self::save($post, $instIE);
+
+        if($prodId){
+            $db = JFactory::getDbo();
+            $query = $db->getQuery(true);
+            $query->insert($db->qn('#__jshopping_import_export_products'))
+                ->columns($db->qn(array('product_id', 'xml_id')))
+                ->values($db->q($prodId) .','. $db->q($product->id));
+            $db->setQuery($query);
+            $db->execute();
+        }
         return true;
     }
 
@@ -26,7 +34,7 @@ class ProductHelper
 
         foreach($instIE->parameters->get('languages') as $lang)
         {
-            $post['name_'.$lang->language] = trim($input->getName());
+            $post['name_'.$lang->language] = trim($input->name);
 
             if ($instIE->jsConfig->create_alias_product_category_auto)
             {
@@ -39,10 +47,10 @@ class ProductHelper
 
         unset($lang);
 
-        $post['product_ean'] = $input->getCode(); //код товара
+        $post['product_ean'] = $input->id; //код товара
 
-        $post['product_date_added'] = getCurDate();
-        $post['date_modify'] = getCurDate();
+        $post['product_date_added'] = date("Y-m-d H:i:s");
+        $post['date_modify'] = date("Y-m-d H:i:s");
 
         $post['product_tax_id'] = 1;
         $post['currency_id'] = 1;
@@ -73,49 +81,31 @@ class ProductHelper
 
         $post['product_publish'] = 1;
 
-        $post['xml_id'] = $input->getId();
-        //$post['xml_parent_id'] = $input->getCategories()->fetch();
-
         return $post;
     }
 
-    static function save($post, &$categories, &$instIE){
-        $columns =array();
-        $values =array();
+    static function save($post, &$instIE){
         $db = JFactory::getDbo();
-
-        foreach ($post as $key=>&$val){
-            $columns [] = $key;
-            $values [] = $db->quote($val);
-        }
-
         $query = $db->getQuery(true);
+
+        $col =array();
+        $val =array();
+        foreach ($post as $k=>$v){
+            $col[] = $k;
+            $val[] = $db->quote($v);
+        }
+        unset($k, $v);
+
         $query->insert($db->quoteName('#__jshopping_products'))
-            ->columns($db->quoteName($columns))
-            ->values(implode(',', $values));
+            ->columns($db->quoteName($col))
+            ->values(implode(',', $val));
 
         $db->setQuery($query);
-        if($db->execute())
-            $id = $db->insertid();
-
+        $db->execute();
+        $prodId = $db->insertid();
         $query->clear();
-        unset($columns, $values);
-
-        if(isset($id)){
-            $values = array();
-            foreach($categories as $category){
-                $values[] = $id .', '. $db->quote($category);
-            }
-            $query->insert($db->quoteName('#__jshopping_products_to_categories'))
-                ->columns($db->quoteName(array('product_id', 'xml_id')))
-                ->values($values);
-            $db->setQuery($query);
-
-            $db->execute();
-            unset($values);
-            $query->clear();
-        }
-        unset($db, $query, $key, $val);
+        unset($col, $val);
+        return $prodId;
     }
 
 }

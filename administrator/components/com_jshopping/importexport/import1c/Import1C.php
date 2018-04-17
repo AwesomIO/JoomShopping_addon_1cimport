@@ -16,10 +16,6 @@ require_once __DIR__.'/helpers/CategoryHelper.php';
 require_once __DIR__.'/helpers/ProductHelper.php';
 require_once __DIR__.'/helpers/OfferHelper.php';
 
-function getCurDate(){
-    return date("Y-m-d H:i:s", time());
-}
-
 class IeImport1C extends IeController
 {
     public $_app;
@@ -27,6 +23,7 @@ class IeImport1C extends IeController
     public $parameters;
     public $_alias;
     public $_categories;
+    public $importStart;
 
 	function view()
 	{
@@ -59,6 +56,7 @@ class IeImport1C extends IeController
         // get languages of component
         $lang = JSFactory::getModel("languages");
         $this->parameters->set('languages', $lang->getAllLanguages(1));
+        $this->importStart=date("Y-m-d H:i:s");
     }
 
     static function getIE(int $ieId){
@@ -319,25 +317,70 @@ class IeImport1C extends IeController
         $newCategories = $db->loadObjectList();
         $query->clear();
 
-        foreach ($newCategories as $newCategory){
-            CategoryHelper::helper($newCategory, $this);
+        foreach ($newCategories as $newProduct){
+            CategoryHelper::helper($newProduct, $this);
         }
 
-        /*$query->update($db->qn('#__jshopping_categories', 'c'))
-            ->set($db->qn('c.category_parent_id') .'='. $db->qn('parent.category_id'))
+        unset($newCategories);
+
+        $query->clear()
+            ->update($db->qn('#__jshopping_categories', 'jc'))
             ->join('LEFT',
-                $db->qn('#__jshopping_import_export_categories', 'category') .' ON '. $db->qn('c.category_id') .'='. $db->qn('category.category_id'))
+                $db->qn('#__jshopping_import_export_categories', 'jiec') .'ON'. $db->qn('jc.category_id') .'='. $db->qn('jiec.category_id'))
             ->join('LEFT',
-                $db->qn('#__tmp_ie_categories', 'category2') .' ON '. $db->qn('category.xml_id') .'='. $db->qn('category2.id'))
+                $db->qn('#__tmp_ie_categories', 'tiec') .'ON'. $db->qn('jiec.xml_id') .'='. $db->qn('tiec.id'))
             ->join('LEFT',
-                $db->qn('#__jshopping_import_export_categories', 'parent') .' ON '. $db->qn('category2.parent') .'='. $db->qn('parent.xml_id'))
-            ->where($db->qn('c.category_parent_id') .'='. 0)
-            ->where($db->qn('category2.parent') .'<> \'\'');
+                $db->qn('#__tmp_ie_categories', 'tiep') .'ON'. $db->qn('tiec.parent') .'='. $db->qn('tiep.id'))
+            ->join('LEFT',
+                $db->qn('#__jshopping_import_export_categories', 'jiep') .'ON'. $db->qn('tiep.id') .'='. $db->qn('jiep.xml_id'))
+            ->set($db->qn('jc.category_parent_id') .'='. $db->qn('jiep.category_id'))
+            ->where($db->qn('jiec.last_import') .' between '. $db->q($this->importStart) .' and NOW()' )
+            ->where($db->qn('tiec.parent') .'<>\'\'')
+            ->where($db->qn('jc.category_parent_id') .'='. 0);
 
         $db->setQuery($query);
-        $db->execute();*/
+        $db->execute();
 
+        $query->clear()
+            ->select($db->qn(
+                array('tiep.id', 'tiep.name'),
+                array('id', 'name')
+            ))
+            ->from($db->qn('#__tmp_ie_products', 'tiep'))
+            ->join('LEFT',
+                $db->qn('#__jshopping_import_export_products', 'jiep') . ' ON (' . $db->qn('tiep.id') . ' = ' . $db->qn('jiep.xml_id') . ')')
+            ->where($db->qn('jiep.xml_id') . 'IS NULL');
+        $db->setQuery($query);
+        $newProducts = $db->loadObjectList();
+        $query->clear();
 
+        foreach ($newProducts as $newProduct){
+            ProductHelper::helper($newProduct, $this);
+        }
+
+        unset($newProducts);
+
+        $query->clear();
+
+        $select = $db->getQuery(true);
+        $select->select($db->qn(array('jiep.product_id', 'jiec.category_id')))
+            ->from($db->qn('#__tmp_ie_product_categories', 'tiepc'))
+            ->join('LEFT',
+                $db->qn('#__jshopping_import_export_categories','jiec') .'on'. $db->qn('tiepc.category') .'='. $db->qn('jiec.xml_id'))
+            ->join('LEFT',
+                $db->qn('#__jshopping_import_export_products','jiep') .'on'. $db->qn('tiepc.product') .'='. $db->qn('jiep.xml_id'))
+            ->join('LEFT',
+                $db->qn('#__jshopping_products_to_categories','jpt') .'on'. $db->qn('jiep.product_id') .'='. $db->qn('jpt.product_id'))
+            ->where($db->qn('jpt.product_id') .' IS NULL');
+
+        $insert = $db->getQuery(true);
+        $insert->insert('#__jshopping_products_to_categories')
+            ->columns($db->qn(array('product_id','category_id')));
+
+        $db->setQuery($insert . ' (product_id, category_id) ' . $select);
+        $db->execute();
+
+        unset($insert, $select);
 
         echo '<pre>';
         echo $query->__toString();
