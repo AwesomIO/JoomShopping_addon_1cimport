@@ -4,9 +4,7 @@ INSERT INTO km71m_jshopping_import_export_categories (km71m_jshopping_import_exp
   (SELECT km71m_jshopping_categories.category_id, km71m_jshopping_categories.xml_id FROM km71m_jshopping_categories
   WHERE km71m_jshopping_categories.xml_id != ''
         AND km71m_jshopping_categories.xml_id IS NOT NULL) ;
-SET FOREIGN_KEY_CHECKS = 1;
 
-SET FOREIGN_KEY_CHECKS = 0;
 INSERT INTO km71m_jshopping_import_export_products (km71m_jshopping_import_export_products.product_id, km71m_jshopping_import_export_products.xml_id)
   (SELECT km71m_jshopping_products.product_id, km71m_jshopping_products.xml_id FROM km71m_jshopping_products
   WHERE km71m_jshopping_products.xml_id != ''
@@ -60,13 +58,27 @@ insert into km71m_jshopping_products_to_categories (product_id, category_id)
     left join km71m_jshopping_import_export_categories as jiec on tiepc.category=jiec.xml_id
     left join km71m_jshopping_import_export_products as jiep on tiepc.product=jiep.xml_id
     left join km71m_jshopping_products_to_categories as jpt on jiep.product_id=jpt.product_id
-  where jpt.product_id IS NULL
+  where jpt.product_id IS NULL;
 
 
-INSERT INTO km71m_jshopping_products_to_categories
+INSERT INTO `km71m_jshopping_products_to_categories`
   SELECT `jiep`.`product_id`,`jiec`.`category_id`
   FROM `km71m_tmp_ie_product_categories` AS `tiepc`
     LEFT JOIN `km71m_jshopping_import_export_categories` AS `jiec`on`tiepc`.`category`=`jiec`.`xml_id`
     LEFT JOIN `km71m_jshopping_import_export_products` AS `jiep`on`tiepc`.`product`=`jiep`.`xml_id`
     LEFT JOIN `km71m_jshopping_products_to_categories` AS `jpt`on`jiep`.`product_id`=`jpt`.`product_id`
-  WHERE `jpt`.`product_id` IS NULL
+  WHERE `jpt`.`product_id` IS NULL;
+
+UPDATE km71m_jshopping_products jp
+  left join km71m_jshopping_import_export_products jiep on jp.product_id = jiep.product_id
+  left join km71m_tmp_ie_products tiep on jiep.xml_id = tiep.id
+  INNER join (
+               select r.product, SUM(r.rest) as restssum from km71m_tmp_ie_rests r
+               group by r.product
+             ) tier on tiep.id = tier.product
+  left join km71m_tmp_ie_prices price on tiep.id = price.product
+SET jp.product_quantity =tier.restssum,
+  jp.min_price=price.unit,
+  jp.product_buy_price=price.unit,
+  jp.product_price=price.unit,
+  jp.date_modify=NOW();

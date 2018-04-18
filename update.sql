@@ -1,8 +1,13 @@
 INSERT INTO `#__jshopping_import_export` (`name`, `alias`, `description`, `params`, `endstart`, `steptime`) VALUES
-('Импорт из 1С', 'Import1C', 'Импортирует каталог из 1С в формате CommerceML.', '', 0, 0);
-  
-DROP PROCEDURE IF EXISTS `CreateIndex`;
-CREATE PROCEDURE `CreateIndex`
+  ('Импорт из 1С', 'Import1C', 'Импортирует каталог из 1С в формате CommerceML.', '', 0, 0);
+
+SET SESSION sql_mode = '';
+
+DROP PROCEDURE IF EXISTS CreateIndex;
+
+DELIMITER //
+
+CREATE PROCEDURE CreateIndex
   (
     given_table    VARCHAR(64),
     given_index    VARCHAR(64),
@@ -28,7 +33,9 @@ CREATE PROCEDURE `CreateIndex`
                     given_table) CreateindexErrorMessage;
     END IF;
 
-  END;
+  END//
+
+DELIMITER ;
 
 
 create table if not exists `#__tmp_ie_categories`
@@ -128,7 +135,7 @@ CREATE TABLE IF NOT EXISTS `#__jshopping_import_export_products`
 call createindex('#__jshopping_import_export_products','#__jshopping_import_export_products___product_id','product_id');
 call createindex('#__jshopping_import_export_products','#__jshopping_import_export_products___id','xml_id');
 
-CREATE TABLE IF NOT EXISTS #__jshopping_import_export_categories
+CREATE TABLE IF NOT EXISTS `#__jshopping_import_export_categories`
 (
   category_id int NOT NULL,
   xml_id nvarchar(128) NOT NULL,
@@ -139,5 +146,31 @@ CREATE TABLE IF NOT EXISTS #__jshopping_import_export_categories
 
 call createindex('#__jshopping_import_export_categories','#__jshopping_import_export_categories___category_id','category_id');
 call createindex('#__jshopping_import_export_categories','#__jshopping_import_export_categories___id','xml_id');
+
+SET FOREIGN_KEY_CHECKS = 0;
+INSERT INTO `#__jshopping_import_export_categories` (`#__jshopping_import_export_categories`.`category_id`, `#__jshopping_import_export_categories`.`xml_id`)
+  (SELECT `#__jshopping_categories`.`category_id`, `#__jshopping_categories`.`xml_id` FROM `#__jshopping_categories`
+  WHERE `#__jshopping_categories`.`xml_id` != ''
+        AND `#__jshopping_categories`.`xml_id` IS NOT NULL) ;
+
+INSERT INTO `#__jshopping_import_export_products` (`#__jshopping_import_export_products`.`product_id`, `#__jshopping_import_export_products`.`xml_id`)
+  (SELECT `#__jshopping_products`.`product_id`, `#__jshopping_products`.`xml_id` FROM `#__jshopping_products`
+  WHERE `#__jshopping_products`.`xml_id` != ''
+        AND `#__jshopping_products`.`xml_id` IS NOT NULL) ;
+SET FOREIGN_KEY_CHECKS = 1;
+
+ALTER TABLE `#__jshopping_categories`
+  DROP INDEX `category_parent_id`,
+  ADD INDEX `category_parent_id` (`category_parent_id`),
+  DROP `xml_id`,
+  DROP `xml_parent_id`;
+
+
+ALTER TABLE `#__jshopping_products`
+  DROP `xml_id`,
+  DROP `xml_parent_id`;
+
+ALTER TABLE `#__jshopping_products_to_categories`
+  DROP `xml_id`;
 
 DROP PROCEDURE IF EXISTS `CreateIndex`;

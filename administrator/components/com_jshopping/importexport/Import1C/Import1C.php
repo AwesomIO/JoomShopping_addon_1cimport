@@ -14,7 +14,6 @@ jimport('joomla.filesystem.folder');
 require_once(JPATH_BASE.'/../cml/vendor/autoload.php');
 require_once __DIR__.'/helpers/CategoryHelper.php';
 require_once __DIR__.'/helpers/ProductHelper.php';
-require_once __DIR__.'/helpers/OfferHelper.php';
 
 class IeImport1C extends IeController
 {
@@ -37,7 +36,7 @@ class IeImport1C extends IeController
 		JToolBarHelper::spacer();
 		JToolBarHelper::save("save", _JSHOP_IMPORT);
 
-		include(dirname(__FILE__)."/form.php");
+		include(dirname(__FILE__)."/Form.php");
 	}
 
 	private function init(){
@@ -381,6 +380,33 @@ class IeImport1C extends IeController
         $db->execute();
 
         unset($insert, $select);
+
+        $subQuery = $db->getQuery(true);
+
+        $subQuery->select(array($db->qn('r.product', 'productid'), 'SUM('.$db->qn('r.rest').') AS '.$db->qn('pricesum')))
+            ->from($db->qn('#__tmp_ie_rests', 'r'))
+            ->group('productid');
+
+        $query->clear()
+            ->update($db->qn('#__jshopping_products', 'jp'))
+            ->join('LEFT',
+                $db->qn('#__jshopping_import_export_products', 'jiep') .' ON '. $db->qn('jp.product_id') .'=', $db->qn('jiep.product_id'))
+            ->join('LEFT',
+                $db->qn('#__tmp_ie_products', 'tiep') .' ON '. $db->qn('jiep.xml_id') .'=', $db->qn('tiep.id'))
+            ->join('LEFT',
+                $db->qn('#__tmp_ie_prices', 'price') .' ON '. $db->qn('tiep.id') .'=', $db->qn('price.product'))
+            ->join('INNER',
+                '('.$subQuery.') AS '. $db->qn('tier') . 'ON' . $db->qn('tiep.id') .'='. $db->qn('tier.product'))
+            ->set($db->qn('jp.product_quantity') .'='. $db->qn('tier.restssum'))
+            ->set($db->qn('jp.min_price') .'='. $db->qn('price.unit'))
+            ->set($db->qn('jp.product_buy_price') .'='. $db->qn('price.unit'))
+            ->set($db->qn('jp.product_price') .'='. $db->qn('price.unit'))
+            ->set($db->qn('jp.date_modify') .'='. $db->q($this->importStart));
+        $db->execute();
+
+        unset($subQuery);
+
+        $query->clear();
 
         echo '<pre>';
         echo $query->__toString();
