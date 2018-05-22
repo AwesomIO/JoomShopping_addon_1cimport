@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS `#__tmp_ie_prices`
 (
   product nvarchar(128) DEFAULT '' NOT NULL,
   type nvarchar(128) DEFAULT '' NOT NULL,
-  unit int DEFAULT 0 NOT NULL,
+  unit float DEFAULT 0 NOT NULL,
   currency text NOT NULL,
   baseUnit text NOT NULL,
   koeff int DEFAULT 1 NOT NULL,
